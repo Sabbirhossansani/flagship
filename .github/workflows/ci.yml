@@ -1,0 +1,29 @@
+name: FlagShip CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build, Unit, Slice, Architecture & QA Tests (Java 21 + Spring Boot 4.x)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Verify Maven & Java versions
+        run: mvn -version
+
+      - name: Run full test suite (Unit, QA1, QA4, Slice, ArchUnit, Testcontainers)
+        run: mvn -B clean test
