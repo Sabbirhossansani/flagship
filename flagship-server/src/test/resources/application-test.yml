@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:flagship_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+flagship:
+  security:
+    jwt-secret: flagship-test-jwt-signing-secret-at-least-32-bytes
+    jwt-expiration-seconds: 3600
+    admin-username: admin
+    admin-password: admin-test-password
+    approver-username: approver
+    approver-password: approver-test-password
+    editor-username: editor
+    editor-password: editor-test-password
+    viewer-username: viewer
+    viewer-password: viewer-test-password
+    bootstrap-api-key: fs_test_bootstrap_key

@@ -1,0 +1,8 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/flagship}
+    username: ${SPRING_DATASOURCE_USERNAME:flagship}
+    password: ${SPRING_DATASOURCE_PASSWORD}

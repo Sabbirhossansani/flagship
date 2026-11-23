@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: flagship-server
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/flagship}
+    username: ${SPRING_DATASOURCE_USERNAME:flagship}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${FLAGSHIP_SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 1.0
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  pattern:
+    console: '{"timestamp":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","service":"flagship-server","traceId":"%X{traceId:-none}","spanId":"%X{spanId:-none}","logger":"%logger{36}","message":"%replace(%replace(%msg){''\"'',''\\\"''}){''[\r\n]+'','' ''}"}%n'
+
+flagship:
+  security:
+    jwt-secret: ${FLAGSHIP_SECURITY_JWT_SECRET:flagship-default-dev-jwt-signing-secret-32b}
+    jwt-expiration-seconds: ${FLAGSHIP_SECURITY_JWT_EXPIRATION_SECONDS:3600}
+    admin-username: ${FLAGSHIP_SECURITY_ADMIN_USERNAME:admin}
+    admin-password: ${FLAGSHIP_SECURITY_ADMIN_PASSWORD:admin_dev_password}
+    approver-username: ${FLAGSHIP_SECURITY_APPROVER_USERNAME:approver}
+    approver-password: ${FLAGSHIP_SECURITY_APPROVER_PASSWORD:approver_dev_password}
+    editor-username: ${FLAGSHIP_SECURITY_EDITOR_USERNAME:editor}
+    editor-password: ${FLAGSHIP_SECURITY_EDITOR_PASSWORD:editor_dev_password}
+    viewer-username: ${FLAGSHIP_SECURITY_VIEWER_USERNAME:viewer}
+    viewer-password: ${FLAGSHIP_SECURITY_VIEWER_PASSWORD:viewer_dev_password}
+    bootstrap-api-key: ${FLAGSHIP_SECURITY_BOOTSTRAP_API_KEY:fs_dev_bootstrap_key}
