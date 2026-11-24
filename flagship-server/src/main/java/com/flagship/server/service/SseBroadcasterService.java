@@ -29,8 +29,11 @@ public class SseBroadcasterService {
     private final ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public SseEmitter subscribe(String projectKey, String envKey) {
+        return subscribe(projectKey, envKey, new SseEmitter(EMITTER_TIMEOUT));
+    }
+
+    public SseEmitter subscribe(String projectKey, String envKey, SseEmitter emitter) {
         String key = buildKey(projectKey, envKey);
-        SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT);
 
         List<SseEmitter> list = emittersByEnv.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>());
         list.add(emitter);
