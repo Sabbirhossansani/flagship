@@ -121,14 +121,16 @@ public class SseBroadcasterService {
 
         virtualExecutor.submit(() -> {
             for (SseEmitter emitter : list) {
-                try {
-                    emitter.send(SseEmitter.event()
-                            .name(eventName)
-                            .data(data)
-                    );
-                } catch (Exception ex) {
-                    removeEmitter(key, emitter);
-                }
+                virtualExecutor.submit(() -> {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .name(eventName)
+                                .data(data)
+                        );
+                    } catch (Exception ex) {
+                        removeEmitter(key, emitter);
+                    }
+                });
             }
         });
     }
@@ -144,13 +146,15 @@ public class SseBroadcasterService {
             if (list == null || list.isEmpty()) continue;
 
             for (SseEmitter emitter : list) {
-                try {
-                    emitter.send(SseEmitter.event()
-                            .comment("keepalive")
-                    );
-                } catch (Exception ex) {
-                    removeEmitter(key, emitter);
-                }
+                virtualExecutor.submit(() -> {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .comment("keepalive")
+                        );
+                    } catch (Exception ex) {
+                        removeEmitter(key, emitter);
+                    }
+                });
             }
         }
     }

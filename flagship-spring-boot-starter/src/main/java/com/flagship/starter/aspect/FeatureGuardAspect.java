@@ -67,13 +67,31 @@ public class FeatureGuardAspect {
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = joinPoint.getArgs();
 
+        Method fallbackMethod = null;
+        Class<?> curr = target.getClass();
+        while (curr != null && curr != Object.class) {
+            try {
+                fallbackMethod = curr.getDeclaredMethod(fallbackMethodName, paramTypes);
+                break;
+            } catch (NoSuchMethodException ignored) {
+                curr = curr.getSuperclass();
+            }
+        }
+
+        if (fallbackMethod == null) {
+            try {
+                fallbackMethod = target.getClass().getMethod(fallbackMethodName, paramTypes);
+            } catch (NoSuchMethodException e) {
+                log.error("Fallback method '{}' not found on class {}", fallbackMethodName, target.getClass().getName());
+                throw new IllegalStateException("Fallback method '" + fallbackMethodName + "' not found on " + target.getClass().getName(), e);
+            }
+        }
+
         try {
-            Method fallbackMethod = target.getClass().getMethod(fallbackMethodName, paramTypes);
             fallbackMethod.setAccessible(true);
             return fallbackMethod.invoke(target, args);
-        } catch (NoSuchMethodException e) {
-            log.error("Fallback method '{}' not found on class {}", fallbackMethodName, target.getClass().getName());
-            throw new IllegalStateException("Fallback method '" + fallbackMethodName + "' not found on " + target.getClass().getName(), e);
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            throw ite.getCause() != null ? ite.getCause() : ite;
         }
     }
 }

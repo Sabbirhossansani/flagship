@@ -126,11 +126,27 @@ public class ScheduledFlagChangeService {
         if ("KILL_SWITCH".equalsIgnoreCase(item.getAction())) {
             KillSwitchRequest req = objectMapper.readValue(item.getPayloadJson(), KillSwitchRequest.class);
             flag.setKillSwitch(req.killSwitch());
+            if (req.killSwitch()) {
+                flag.setFullRolloutSince(null);
+            } else if (flag.isEnabled() && flag.getRolloutPercentage() >= 100.0) {
+                if (flag.getFullRolloutSince() == null) {
+                    flag.setFullRolloutSince(now);
+                }
+            }
         } else if ("UPDATE".equalsIgnoreCase(item.getAction()) || "SET_ROLLOUT".equalsIgnoreCase(item.getAction())) {
             UpdateFlagRequest req = objectMapper.readValue(item.getPayloadJson(), UpdateFlagRequest.class);
             if (req.rolloutPercentage() != null) flag.setRolloutPercentage(req.rolloutPercentage());
+            if (req.rolloutVariationKey() != null) flag.setRolloutVariationKey(req.rolloutVariationKey());
             if (req.enabled() != null) flag.setEnabled(req.enabled());
             if (req.killSwitch() != null) flag.setKillSwitch(req.killSwitch());
+
+            if (flag.isEnabled() && !flag.isKillSwitch() && flag.getRolloutPercentage() >= 100.0) {
+                if (flag.getFullRolloutSince() == null) {
+                    flag.setFullRolloutSince(now);
+                }
+            } else {
+                flag.setFullRolloutSince(null);
+            }
         }
 
         flag.setVersion(flag.getVersion() + 1);

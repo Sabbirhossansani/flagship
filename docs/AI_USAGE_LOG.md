@@ -71,3 +71,20 @@ Constraint C11 requires documenting **at least three specific cases** where the 
 - **How It Was Fixed**:
   1. Overloaded `subscribe(String projectKey, String envKey, SseEmitter emitter)` to accept a caller-provided emitter, delegating `subscribe(projectKey, envKey)` to it.
   2. This allowed `Qa3KillSwitchPropagationTest` to inject custom `SseEmitter` instances overriding `send()`, recording nanosecond timestamps across 50 virtual clients and proving 5 ms propagation.
+
+### Case Study 4: Two-Person Change Request Approval Dropping Rules & Variations
+- **Initial AI Output**: In Phase 3, `ChangeControlService.applyChangeRequestPayload` only transferred `name`, `description`, `enabled`, `killSwitch`, and `rolloutPercentage` when approving an `UPDATE` change request.
+- **How It Was Found**: Sceptical code review identified that if a user submitted a change request containing targeting rules, new variations, weighted percentage rollouts, user targets, or custom owners in production, approving the change request silently discarded the targeting rules and variations.
+- **Root-Cause Analysis**: Incomplete deserialization and mapping in `applyChangeRequestPayload`, along with missing `DELETE` approval support.
+- **How It Was Fixed**:
+  1. Updated `applyChangeRequestPayload` to parse and apply all `UpdateFlagRequest` fields (`variations`, `rules`, `percentageRollout`, `individualTargets`, `defaultVariationKey`, `offVariationKey`, `owner`).
+  2. Added support for `DELETE` change request approvals.
+  3. Added comprehensive automated integration tests in `Phase3AdvancedFeaturesIntegrationTest.java` verifying rules, variations, and flag deletion upon approval.
+
+### Case Study 5: Observer Pattern Flag Deletion Notification Omission
+- **Initial AI Output**: In Phase 4, `DefaultFlagShipClient.notifyChanges` only iterated over `newSnapshot.flags().entrySet()`, checking for modified or newly added flags.
+- **How It Was Found**: In inspecting the `FlagChangeListener` contract, the javadoc explicitly states `@param newDefinition the updated flag definition (or null if deleted)`. However, when a flag was deleted from an environment snapshot, listeners were never called with `null`.
+- **Root-Cause Analysis**: The change detection logic did not compare `oldSnapshot.flags().keySet()` against `newSnapshot.flags()`.
+- **How It Was Fixed**:
+  1. Added a second pass in `DefaultFlagShipClient.notifyChanges` iterating over `oldFlags.keySet()` to find deleted keys and fire `listener.onFlagChanged(oldKey, null)`.
+  2. Added unit test `DefaultFlagShipClientUnitTest.changeListener_notifiesUpdatesAndDeletions` verifying that additions, updates, and deletions are all properly emitted.

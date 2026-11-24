@@ -81,11 +81,12 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
-      FLAGSHIP_CLIENT_SERVER_URL: http://flagship-server:8080
-      FLAGSHIP_CLIENT_API_KEY: ${FLAGSHIP_API_KEY:-fs_dev_bootstrap_key}
-      FLAGSHIP_CLIENT_PROJECT_KEY: default
-      FLAGSHIP_CLIENT_ENVIRONMENT_KEY: production
-      FLAGSHIP_CLIENT_SNAPSHOT_PATH: /tmp/flagship-snapshot.json
+      SERVER_PORT: 8082
+      FLAGSHIP_SERVER_URL: http://flagship-server:8080
+      FLAGSHIP_API_KEY: ${FLAGSHIP_API_KEY:-fs_dev_bootstrap_key}
+      FLAGSHIP_PROJECT_KEY: default
+      FLAGSHIP_ENVIRONMENT_KEY: production
+      FLAGSHIP_DISK_PERSISTENCE_PATH: /tmp/flagship-snapshot.json
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseSerialGC"
     ports:
       - "${FLAGSHIP_DEMO_APP_PORT:-8082}:8082"

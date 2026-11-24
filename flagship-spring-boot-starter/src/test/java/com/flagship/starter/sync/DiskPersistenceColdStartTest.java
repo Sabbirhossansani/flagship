@@ -67,4 +67,22 @@ class DiskPersistenceColdStartTest {
         assertThat(loaded.flags()).containsKey("checkout-v2");
         assertThat(loaded.flags().get("checkout-v2").getVersion()).isEqualTo(5L);
     }
+
+    @Test
+    @DisplayName("FR6 Disk Persistence: Corrupted cache file safely returns null and quarantines file")
+    void corruptedCache_returnsNullAndQuarantines() throws Exception {
+        Path corruptCache = tempDir.resolve("corrupt-flag-cache.json");
+        java.nio.file.Files.writeString(corruptCache, "{ invalid_json: corrupted content %%%");
+
+        FlagshipStarterProperties properties = new FlagshipStarterProperties();
+        properties.setDiskPersistenceEnabled(true);
+        properties.setDiskPersistencePath(corruptCache.toString());
+
+        DiskPersistenceManager manager = new DiskPersistenceManager(properties);
+        EnvironmentSnapshot loaded = manager.load();
+
+        assertThat(loaded).isNull();
+        // Verifies the corrupted file was moved to .corrupt quarantine
+        assertThat(tempDir.resolve("corrupt-flag-cache.json.corrupt")).exists();
+    }
 }

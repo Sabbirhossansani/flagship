@@ -66,4 +66,21 @@ class FlagHygieneUnitTest {
 
         assertThat(result).isNull();
     }
+
+    @Test
+    @DisplayName("Hygiene: Uninitialized flag entity with null createdAt and lastEvaluatedAt does not throw NPE")
+    void uninitializedFlag_doesNotThrowNpe() {
+        Instant now = Instant.now();
+        FlagEntity flag = new FlagEntity();
+        flag.setFlagKey("new-unpersisted-flag");
+        flag.setName("New Flag");
+        flag.setOwner("alice");
+        flag.setCreatedAt(null);
+        flag.setLastEvaluatedAt(null);
+        flag.setFullRolloutSince(null);
+
+        StaleFlagDto result = service.evaluateStaleness("proj", "prod", flag, now);
+
+        assertThat(result).isNull();
+    }
 }

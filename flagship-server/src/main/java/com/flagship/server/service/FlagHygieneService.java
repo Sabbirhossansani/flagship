@@ -107,21 +107,23 @@ public class FlagHygieneService {
                 ? flag.getLastEvaluatedAt()
                 : flag.getCreatedAt();
 
-        long daysInactive = Duration.between(referenceEvaluationTime, now).toDays();
-        if (daysInactive >= INACTIVE_DAYS_THRESHOLD) {
-            return new StaleFlagDto(
-                    projectKey,
-                    envKey,
-                    flag.getFlagKey(),
-                    flag.getName(),
-                    flag.getOwner(),
-                    "NOT_EVALUATED_IN_30_DAYS",
-                    daysInactive,
-                    flag.getFullRolloutSince() != null ? Duration.between(flag.getFullRolloutSince(), now).toDays() : null,
-                    flag.getLastEvaluatedAt(),
-                    flag.getFullRolloutSince(),
-                    "Flag has not been evaluated in over 30 days. Investigate if feature is dead or abandoned."
-            );
+        if (referenceEvaluationTime != null) {
+            long daysInactive = Duration.between(referenceEvaluationTime, now).toDays();
+            if (daysInactive >= INACTIVE_DAYS_THRESHOLD) {
+                return new StaleFlagDto(
+                        projectKey,
+                        envKey,
+                        flag.getFlagKey(),
+                        flag.getName(),
+                        flag.getOwner(),
+                        "NOT_EVALUATED_IN_30_DAYS",
+                        daysInactive,
+                        flag.getFullRolloutSince() != null ? Duration.between(flag.getFullRolloutSince(), now).toDays() : null,
+                        flag.getLastEvaluatedAt(),
+                        flag.getFullRolloutSince(),
+                        "Flag has not been evaluated in over 30 days. Investigate if feature is dead or abandoned."
+                );
+            }
         }
 
         return null;
@@ -129,6 +131,6 @@ public class FlagHygieneService {
 
     private Long calculateDaysInactive(FlagEntity flag, Instant now) {
         Instant ref = flag.getLastEvaluatedAt() != null ? flag.getLastEvaluatedAt() : flag.getCreatedAt();
-        return Duration.between(ref, now).toDays();
+        return ref != null ? Duration.between(ref, now).toDays() : 0L;
     }
 }

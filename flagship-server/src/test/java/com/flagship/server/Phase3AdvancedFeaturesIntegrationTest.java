@@ -205,6 +205,63 @@ public class Phase3AdvancedFeaturesIntegrationTest {
         // Verify flag was actually updated to 100%
         FlagResponse currentFlag = flagService.getFlag(projectKey, prodEnvKey, flagKey);
         assertThat(currentFlag.rolloutPercentage()).isEqualTo(100.0);
+
+        // Test Change Request with Rules, Variations, and DELETE
+        UpdateFlagRequest updateWithRules = new UpdateFlagRequest(
+                "Protected Flag v3",
+                "Update with rules and variations",
+                "alice-lead",
+                true,
+                false,
+                List.of(
+                        new VariationRequest("treatment-a", true),
+                        new VariationRequest("treatment-b", false)
+                ),
+                "treatment-a",
+                "treatment-b",
+                Map.of("user-999", "treatment-a"),
+                List.of(new TargetingRuleDto(
+                        "rule-1",
+                        "Beta testers rule",
+                        null,
+                        com.flagship.server.dto.RuleNodeDto.leaf("beta", com.flagship.core.rule.RuleOperatorType.EQUALS, List.of("true")),
+                        "Beta tester check",
+                        "treatment-a",
+                        List.of()
+                )),
+                50.0,
+                "treatment-a",
+                List.of(new com.flagship.core.model.WeightedVariation("treatment-a", 50000))
+        );
+        String rulesPayloadJson = objectMapper.writeValueAsString(updateWithRules);
+
+        ChangeRequestResponse cr2 = changeControlService.createChangeRequest(
+                projectKey,
+                prodEnvKey,
+                new CreateChangeRequestDto("FLAG", flagKey, "UPDATE", rulesPayloadJson, "Deploy targeted rule"),
+                "alice"
+        );
+        changeControlService.approveChangeRequest(projectKey, prodEnvKey, cr2.id(), "bob");
+
+        FlagResponse updatedFlag = flagService.getFlag(projectKey, prodEnvKey, flagKey);
+        assertThat(updatedFlag.name()).isEqualTo("Protected Flag v3");
+        assertThat(updatedFlag.owner()).isEqualTo("alice-lead");
+        assertThat(updatedFlag.variations()).hasSize(2);
+        assertThat(updatedFlag.rules()).hasSize(1);
+        assertThat(updatedFlag.rules().get(0).name()).isEqualTo("Beta testers rule");
+        assertThat(updatedFlag.individualTargets()).containsEntry("user-999", "treatment-a");
+
+        // Submit and approve DELETE change request
+        ChangeRequestResponse crDelete = changeControlService.createChangeRequest(
+                projectKey,
+                prodEnvKey,
+                new CreateChangeRequestDto("FLAG", flagKey, "DELETE", "{}", "Decommission flag"),
+                "alice"
+        );
+        changeControlService.approveChangeRequest(projectKey, prodEnvKey, crDelete.id(), "bob");
+
+        assertThatThrownBy(() -> flagService.getFlag(projectKey, prodEnvKey, flagKey))
+                .isInstanceOf(com.flagship.server.exception.ResourceNotFoundException.class);
     }
 
     @Test

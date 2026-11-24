@@ -52,6 +52,7 @@ public class DefaultFlagShipClient implements FlagShipClient {
         Map<String, FlagDefinition> oldFlags = oldSnapshot != null ? oldSnapshot.flags() : Map.of();
         Map<String, FlagDefinition> newFlags = newSnapshot.flags();
 
+        // 1. Notify updated or newly added flags
         for (Map.Entry<String, FlagDefinition> entry : newFlags.entrySet()) {
             String flagKey = entry.getKey();
             FlagDefinition newDef = entry.getValue();
@@ -63,6 +64,20 @@ public class DefaultFlagShipClient implements FlagShipClient {
                         listener.onFlagChanged(flagKey, newDef);
                     } catch (Exception ex) {
                         log.warn("Error notifying FlagChangeListener for key '{}'", flagKey, ex);
+                    }
+                }
+            }
+        }
+
+        // 2. Notify deleted flags (present in old snapshot, absent in new snapshot)
+        for (Map.Entry<String, FlagDefinition> oldEntry : oldFlags.entrySet()) {
+            String oldKey = oldEntry.getKey();
+            if (!newFlags.containsKey(oldKey)) {
+                for (FlagChangeListener listener : changeListeners) {
+                    try {
+                        listener.onFlagChanged(oldKey, null);
+                    } catch (Exception ex) {
+                        log.warn("Error notifying FlagChangeListener for deleted key '{}'", oldKey, ex);
                     }
                 }
             }

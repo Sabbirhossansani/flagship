@@ -31,6 +31,15 @@ class FeatureGuardAspectUnitTest {
         public String executeFallback() {
             return "fallback-execution";
         }
+
+        @FeatureGuard(value = "new-feature", fallbackMethod = "privateFallback")
+        public String executeWithPrivateFallback() {
+            return "real-execution";
+        }
+
+        private String privateFallback() {
+            return "private-fallback-execution";
+        }
     }
 
     @Test
@@ -75,5 +84,19 @@ class FeatureGuardAspectUnitTest {
         assertThatThrownBy(proxy::executeGuarded)
                 .isInstanceOf(FeatureDisabledException.class)
                 .hasMessageContaining("new-feature");
+    }
+
+    @Test
+    @DisplayName("@FeatureGuard: Successfully invokes private fallback method")
+    void flagDisabled_invokesPrivateFallbackMethod() {
+        FlagShipClient client = mock(FlagShipClient.class);
+        when(client.isEnabled(eq("new-feature"), any(EvaluationContext.class), eq(false))).thenReturn(false);
+
+        FeatureGuardAspect aspect = new FeatureGuardAspect(client);
+        AspectJProxyFactory factory = new AspectJProxyFactory(new SampleService());
+        factory.addAspect(aspect);
+        SampleService proxy = factory.getProxy();
+
+        assertThat(proxy.executeWithPrivateFallback()).isEqualTo("private-fallback-execution");
     }
 }

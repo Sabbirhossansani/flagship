@@ -30,6 +30,7 @@ public class DiskPersistenceManager {
             return;
         }
 
+        Path tempFile = null;
         try {
             Path targetPath = Path.of(properties.getDiskPersistencePath());
             Path parentDir = targetPath.getParent();
@@ -37,7 +38,7 @@ public class DiskPersistenceManager {
                 Files.createDirectories(parentDir);
             }
 
-            Path tempFile = Files.createTempFile(parentDir != null ? parentDir : Path.of("."), "flagship-snap", ".tmp");
+            tempFile = Files.createTempFile(parentDir != null ? parentDir : Path.of("."), "flagship-snap", ".tmp");
             String json = FlagshipSnapshotParser.serialize(snapshot);
             Files.writeString(tempFile, json, StandardCharsets.UTF_8);
 
@@ -49,6 +50,13 @@ public class DiskPersistenceManager {
             log.debug("Persisted FlagShip snapshot revision {} to disk at '{}'", snapshot.revision(), targetPath);
         } catch (Exception ex) {
             log.warn("Failed to persist FlagShip snapshot to disk: {}", ex.getMessage());
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignored) {
+                }
+            }
         }
     }
 
@@ -69,6 +77,15 @@ public class DiskPersistenceManager {
             return snapshot;
         } catch (Exception ex) {
             log.warn("Failed to read FlagShip cache from disk '{}': {}", file.getAbsolutePath(), ex.getMessage());
+            try {
+                File corruptFile = new File(file.getAbsolutePath() + ".corrupt");
+                if (corruptFile.exists()) {
+                    corruptFile.delete();
+                }
+                file.renameTo(corruptFile);
+                log.info("Quarantined corrupted FlagShip cache file to '{}'", corruptFile.getAbsolutePath());
+            } catch (Exception ignored) {
+            }
             return null;
         }
     }

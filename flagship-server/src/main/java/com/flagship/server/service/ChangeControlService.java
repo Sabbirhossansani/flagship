@@ -318,21 +318,81 @@ public class ChangeControlService {
                 ).orElseThrow(() -> new ResourceNotFoundException("Flag '" + req.getEntityKey() + "' not found"));
 
                 String beforeJson = captureState(req.getProjectKey(), req.getEnvKey(), "FLAG", req.getEntityKey());
+                Instant now = Instant.now();
+
+                if ("DELETE".equalsIgnoreCase(req.getAction())) {
+                    flagRepository.delete(flag);
+                    EnvironmentEntity env = projectService.requireEnvironmentEntity(req.getProjectKey(), req.getEnvKey());
+                    env.incrementRevision(now);
+                    environmentRepository.save(env);
+
+                    FlagChangeHistoryEntity history = new FlagChangeHistoryEntity();
+                    history.setProjectKey(req.getProjectKey());
+                    history.setEnvKey(req.getEnvKey());
+                    history.setEntityType("FLAG");
+                    history.setEntityKey(req.getEntityKey());
+                    history.setVersion(flag.getVersion() + 1);
+                    history.setAuthor(approver + " (on behalf of " + req.getAuthor() + ")");
+                    history.setReason(req.getReason());
+                    history.setAction("DELETE_APPROVED");
+                    history.setBeforeJson(beforeJson);
+                    history.setAfterJson(null);
+                    history.setDiffSummary("Approved deletion of flag '" + req.getEntityKey() + "' by " + approver);
+                    history.setCreatedAt(now);
+                    historyRepository.save(history);
+
+                    FlagResponse resp = jsonCodec.toFlagResponse(req.getProjectKey(), flag);
+                    sseBroadcasterService.broadcastFlagUpdate(req.getProjectKey(), req.getEnvKey(), "DELETE", resp);
+                    return;
+                }
 
                 if ("UPDATE".equalsIgnoreCase(req.getAction())) {
                     UpdateFlagRequest updateReq = objectMapper.readValue(req.getPayloadJson(), UpdateFlagRequest.class);
                     if (updateReq.name() != null) flag.setName(updateReq.name());
                     if (updateReq.description() != null) flag.setDescription(updateReq.description());
+                    if (updateReq.owner() != null && !updateReq.owner().isBlank()) flag.setOwner(updateReq.owner());
                     if (updateReq.enabled() != null) flag.setEnabled(updateReq.enabled());
                     if (updateReq.killSwitch() != null) flag.setKillSwitch(updateReq.killSwitch());
+                    if (updateReq.defaultVariationKey() != null) flag.setDefaultVariationKey(updateReq.defaultVariationKey());
+                    if (updateReq.offVariationKey() != null) flag.setOffVariationKey(updateReq.offVariationKey());
+
+                    if (updateReq.variations() != null && !updateReq.variations().isEmpty()) {
+                        List<Variation> vars = updateReq.variations().stream()
+                                .map(v -> new Variation(v.key(), flag.getVariationType(), v.value(), v.description()))
+                                .toList();
+                        flag.setVariationsJson(jsonCodec.writeVariations(vars));
+                    }
+                    if (updateReq.individualTargets() != null) {
+                        flag.setIndividualTargetsJson(jsonCodec.writeStringMap(updateReq.individualTargets()));
+                    }
+                    if (updateReq.rules() != null) {
+                        flag.setRulesJson(jsonCodec.writeRules(updateReq.rules()));
+                    }
                     if (updateReq.rolloutPercentage() != null) flag.setRolloutPercentage(updateReq.rolloutPercentage());
                     if (updateReq.rolloutVariationKey() != null) flag.setRolloutVariationKey(updateReq.rolloutVariationKey());
+                    if (updateReq.percentageRollout() != null) {
+                        flag.setPercentageRolloutJson(jsonCodec.writeWeightedVariations(updateReq.percentageRollout()));
+                    }
+
+                    if (flag.isEnabled() && !flag.isKillSwitch() && flag.getRolloutPercentage() >= 100.0) {
+                        if (flag.getFullRolloutSince() == null) {
+                            flag.setFullRolloutSince(now);
+                        }
+                    } else {
+                        flag.setFullRolloutSince(null);
+                    }
                 } else if ("KILL_SWITCH".equalsIgnoreCase(req.getAction())) {
                     KillSwitchRequest ks = objectMapper.readValue(req.getPayloadJson(), KillSwitchRequest.class);
                     flag.setKillSwitch(ks.killSwitch());
+                    if (ks.killSwitch()) {
+                        flag.setFullRolloutSince(null);
+                    } else if (flag.isEnabled() && flag.getRolloutPercentage() >= 100.0) {
+                        if (flag.getFullRolloutSince() == null) {
+                            flag.setFullRolloutSince(now);
+                        }
+                    }
                 }
 
-                Instant now = Instant.now();
                 flag.setVersion(flag.getVersion() + 1);
                 flag.setUpdatedAt(now);
                 FlagEntity saved = flagRepository.save(flag);
