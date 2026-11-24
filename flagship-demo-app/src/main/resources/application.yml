@@ -1,0 +1,23 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: flagship-demo-app
+
+flagship:
+  enabled: true
+  server-url: http://localhost:8080
+  project-key: demo-project
+  environment-key: production
+  api-key: dev-bootstrap-secret-change-in-production-min32chars
+  polling-interval: 30s
+  sse-enabled: false
+  disk-persistence-enabled: true
+  disk-persistence-path: ./target/.demo-cache.json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,flagship
