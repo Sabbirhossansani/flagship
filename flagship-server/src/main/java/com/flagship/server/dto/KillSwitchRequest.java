@@ -7,4 +7,7 @@ public record KillSwitchRequest(
         Boolean killSwitch,
         String reason
 ) {
+    public KillSwitchRequest(Boolean killSwitch) {
+        this(killSwitch, null);
+    }
 }

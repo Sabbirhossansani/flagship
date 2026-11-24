@@ -13,6 +13,10 @@ public record VariationRequest(
         Object value,
         String description
 ) {
+    public VariationRequest(String key, Object value) {
+        this(key, null, value, null);
+    }
+
     public static VariationRequest from(Variation variation) {
         return new VariationRequest(
                 variation.key(),

@@ -30,19 +30,22 @@ public class SegmentService {
     private final SegmentRepository segmentRepository;
     private final DomainJsonCodec jsonCodec;
     private final RuleValidationVisitor validationVisitor;
+    private final SseBroadcasterService sseBroadcasterService;
 
     public SegmentService(
             ProjectService projectService,
             EnvironmentRepository environmentRepository,
             SegmentRepository segmentRepository,
             DomainJsonCodec jsonCodec,
-            RuleValidationVisitor validationVisitor
+            RuleValidationVisitor validationVisitor,
+            SseBroadcasterService sseBroadcasterService
     ) {
         this.projectService = projectService;
         this.environmentRepository = environmentRepository;
         this.segmentRepository = segmentRepository;
         this.jsonCodec = jsonCodec;
         this.validationVisitor = validationVisitor;
+        this.sseBroadcasterService = sseBroadcasterService;
     }
 
     @Transactional
@@ -74,7 +77,9 @@ public class SegmentService {
         SegmentEntity saved = segmentRepository.save(entity);
         env.incrementRevision(now);
         environmentRepository.save(env);
-        return jsonCodec.toSegmentResponse(projectKey, saved);
+        SegmentResponse response = jsonCodec.toSegmentResponse(projectKey, saved);
+        sseBroadcasterService.broadcastSegmentUpdate(projectKey, envKey, "CREATE", response);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -118,16 +123,20 @@ public class SegmentService {
         SegmentEntity saved = segmentRepository.save(entity);
         env.incrementRevision(now);
         environmentRepository.save(env);
-        return jsonCodec.toSegmentResponse(projectKey, saved);
+        SegmentResponse response = jsonCodec.toSegmentResponse(projectKey, saved);
+        sseBroadcasterService.broadcastSegmentUpdate(projectKey, envKey, "CREATE", response);
+        return response;
     }
 
     @Transactional
     public void deleteSegment(String projectKey, String envKey, String segmentKey) {
         EnvironmentEntity env = projectService.requireEnvironmentEntity(projectKey, envKey);
         SegmentEntity entity = requireSegmentEntity(projectKey, envKey, segmentKey);
+        SegmentResponse response = jsonCodec.toSegmentResponse(projectKey, entity);
         segmentRepository.delete(entity);
         env.incrementRevision(Instant.now());
         environmentRepository.save(env);
+        sseBroadcasterService.broadcastSegmentUpdate(projectKey, envKey, "DELETE", response);
     }
 
     public SegmentEntity requireSegmentEntity(String projectKey, String envKey, String segmentKey) {

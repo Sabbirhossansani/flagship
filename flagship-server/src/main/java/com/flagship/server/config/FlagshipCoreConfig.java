@@ -1,5 +1,6 @@
 package com.flagship.server.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flagship.core.evaluation.FlagEvaluationEngine;
 import com.flagship.core.rule.RuleDescribeVisitor;
 import com.flagship.core.rule.RuleValidationVisitor;
@@ -11,6 +12,13 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class FlagshipCoreConfig {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
+        return mapper;
+    }
 
     @Bean
     public FlagEvaluationEngine flagEvaluationEngine() {

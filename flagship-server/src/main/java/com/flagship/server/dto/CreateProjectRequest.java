@@ -22,4 +22,7 @@ public record CreateProjectRequest(
         @Valid
         List<CreateEnvironmentRequest> environments
 ) {
+    public CreateProjectRequest(String key, String name, String description) {
+        this(key, name, description, List.of());
+    }
 }

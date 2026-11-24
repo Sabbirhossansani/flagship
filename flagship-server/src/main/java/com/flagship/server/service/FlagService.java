@@ -1,5 +1,6 @@
 package com.flagship.server.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flagship.core.model.TargetingRule;
 import com.flagship.core.model.Variation;
 import com.flagship.core.model.VariationType;
@@ -8,6 +9,8 @@ import com.flagship.core.rule.RuleDescribeVisitor;
 import com.flagship.core.rule.RuleValidationVisitor;
 import com.flagship.server.domain.EnvironmentEntity;
 import com.flagship.server.domain.EnvironmentRepository;
+import com.flagship.server.domain.FlagChangeHistoryEntity;
+import com.flagship.server.domain.FlagChangeHistoryRepository;
 import com.flagship.server.domain.FlagEntity;
 import com.flagship.server.domain.FlagRepository;
 import com.flagship.server.dto.CreateFlagRequest;
@@ -41,6 +44,9 @@ public class FlagService {
     private final DomainJsonCodec jsonCodec;
     private final RuleValidationVisitor validationVisitor;
     private final RuleDescribeVisitor describeVisitor;
+    private final SseBroadcasterService sseBroadcasterService;
+    private final FlagChangeHistoryRepository historyRepository;
+    private final ObjectMapper objectMapper;
 
     public FlagService(
             ProjectService projectService,
@@ -48,7 +54,10 @@ public class FlagService {
             FlagRepository flagRepository,
             DomainJsonCodec jsonCodec,
             RuleValidationVisitor validationVisitor,
-            RuleDescribeVisitor describeVisitor
+            RuleDescribeVisitor describeVisitor,
+            SseBroadcasterService sseBroadcasterService,
+            FlagChangeHistoryRepository historyRepository,
+            ObjectMapper objectMapper
     ) {
         this.projectService = projectService;
         this.environmentRepository = environmentRepository;
@@ -56,6 +65,9 @@ public class FlagService {
         this.jsonCodec = jsonCodec;
         this.validationVisitor = validationVisitor;
         this.describeVisitor = describeVisitor;
+        this.sseBroadcasterService = sseBroadcasterService;
+        this.historyRepository = historyRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -118,7 +130,10 @@ public class FlagService {
         FlagEntity saved = flagRepository.save(entity);
         env.incrementRevision(now);
         environmentRepository.save(env);
-        return jsonCodec.toFlagResponse(projectKey, saved);
+        FlagResponse response = jsonCodec.toFlagResponse(projectKey, saved);
+        recordAudit(projectKey, envKey, saved.getFlagKey(), saved.getVersion(), saved.getOwner(), "Flag created", "CREATE", null, response, "Created flag");
+        sseBroadcasterService.broadcastFlagUpdate(projectKey, envKey, "CREATE", response);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -219,7 +234,10 @@ public class FlagService {
         FlagEntity saved = flagRepository.save(entity);
         env.incrementRevision(now);
         environmentRepository.save(env);
-        return jsonCodec.toFlagResponse(projectKey, saved);
+        FlagResponse response = jsonCodec.toFlagResponse(projectKey, saved);
+        recordAudit(projectKey, envKey, saved.getFlagKey(), saved.getVersion(), saved.getOwner(), "Flag updated", "UPDATE", null, response, "Updated flag attributes");
+        sseBroadcasterService.broadcastFlagUpdate(projectKey, envKey, "UPDATE", response);
+        return response;
     }
 
     @Transactional
@@ -249,16 +267,57 @@ public class FlagService {
         FlagEntity saved = flagRepository.save(entity);
         env.incrementRevision(now);
         environmentRepository.save(env);
-        return jsonCodec.toFlagResponse(projectKey, saved);
+        FlagResponse response = jsonCodec.toFlagResponse(projectKey, saved);
+        recordAudit(projectKey, envKey, saved.getFlagKey(), saved.getVersion(), saved.getOwner(),
+                killSwitch ? "Kill switch engaged" : "Kill switch disengaged",
+                "KILL_SWITCH", null, response, "Kill switch set to " + killSwitch);
+        sseBroadcasterService.broadcastFlagUpdate(projectKey, envKey, "KILL_SWITCH", response);
+        return response;
     }
 
     @Transactional
     public void deleteFlag(String projectKey, String envKey, String flagKey) {
         EnvironmentEntity env = projectService.requireEnvironmentEntity(projectKey, envKey);
         FlagEntity entity = requireFlagEntity(projectKey, envKey, flagKey);
+        FlagResponse lastResponse = jsonCodec.toFlagResponse(projectKey, entity);
         flagRepository.delete(entity);
         env.incrementRevision(Instant.now());
         environmentRepository.save(env);
+        recordAudit(projectKey, envKey, flagKey, entity.getVersion() + 1, entity.getOwner(),
+                "Flag deleted", "DELETE", lastResponse, null, "Deleted flag");
+        sseBroadcasterService.broadcastFlagUpdate(projectKey, envKey, "DELETE", lastResponse);
+    }
+
+    private void recordAudit(
+            String projectKey,
+            String envKey,
+            String flagKey,
+            long version,
+            String author,
+            String reason,
+            String action,
+            FlagResponse before,
+            FlagResponse after,
+            String diffSummary
+    ) {
+        try {
+            FlagChangeHistoryEntity history = new FlagChangeHistoryEntity();
+            history.setProjectKey(projectKey);
+            history.setEnvKey(envKey);
+            history.setEntityType("FLAG");
+            history.setEntityKey(flagKey);
+            history.setVersion(version);
+            history.setAuthor(author != null ? author : "system");
+            history.setReason(reason != null ? reason : action);
+            history.setAction(action);
+            history.setBeforeJson(before != null ? objectMapper.writeValueAsString(before) : null);
+            history.setAfterJson(after != null ? objectMapper.writeValueAsString(after) : null);
+            history.setDiffSummary(diffSummary != null ? diffSummary : action);
+            history.setCreatedAt(Instant.now());
+            historyRepository.save(history);
+        } catch (Exception ex) {
+            // Audit persistence should not prevent flag operations
+        }
     }
 
     public FlagEntity requireFlagEntity(String projectKey, String envKey, String flagKey) {

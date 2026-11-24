@@ -6,6 +6,10 @@ public class RuleValidationException extends RuntimeException {
 
     private final List<String> errors;
 
+    public RuleValidationException(String message) {
+        this(message, List.of(message));
+    }
+
     public RuleValidationException(String message, List<String> errors) {
         super(message);
         this.errors = errors != null ? List.copyOf(errors) : List.of();

@@ -32,6 +32,10 @@ public interface FlagRepository extends JpaRepository<FlagEntity, Long> {
             String envKey
     );
 
+    List<FlagEntity> findAllByProject_ProjectKeyOrderByFlagKeyAsc(
+            String projectKey
+    );
+
     void deleteAllByProject_ProjectKeyAndEnvKey(String projectKey, String envKey);
 
     void deleteAllByProject_ProjectKey(String projectKey);
