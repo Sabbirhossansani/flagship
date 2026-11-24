@@ -2,12 +2,15 @@ package com.flagship.server.domain;
 
 import com.flagship.core.model.ProjectRole;
 import com.flagship.core.model.VariationType;
+import com.flagship.server.TestDatabaseCleaner;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
@@ -37,6 +40,14 @@ class FlagshipRepositoryDataJpaSliceTest {
 
     @Autowired
     private ProjectRoleAssignmentRepository roleAssignmentRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void cleanDatabaseBeforeEach() {
+        TestDatabaseCleaner.cleanAllTables(jdbcTemplate);
+    }
 
     @Test
     void persistsAndQueriesProjectEnvironmentsSegmentsFlagsAndRolesViaFlywaySchema() {

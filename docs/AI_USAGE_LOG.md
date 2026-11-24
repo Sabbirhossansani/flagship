@@ -23,7 +23,9 @@ The project was structured into strictly decoupled phases with independent Git c
 | **Phase 4** | `73fdd6a` | `flagship-spring-boot-starter` with `@AutoConfiguration`, `@FeatureGuard` AOP aspect, in-memory cache, local disk persistence, SSE client with polling fallback, `/actuator/flagship` endpoint, and `flagship-demo-app`. | 47 Tests Passed |
 | **Phase 5** | `8df5b8a` | `flagship-admin-web` dashboard (Thymeleaf/HTMX/Tailwind), responsive UI for flags/segments/audit/experiments, Dockerfiles for all microservices, and `docker-compose.yml` multi-container orchestration. | 47 Tests Passed |
 | **Phase 6** | `1f467de` | ArchUnit architectural fitness tests (C6) enforcing module boundaries and pure Java domain constraints; runnable QA1–QA5 automated scripts in `scripts/qa/`. | 50 Tests Passed |
-| **Phase 7** | *(Current)* | C4 architecture diagrams, CAP theorem analysis, 4 ADRs, Mini-ATAM utility tree, Pattern justification table (C8), Evidence report (C9), AI usage log (C11), and comprehensive README.md. | All Tests Passed |
+| **Phase 7** | `8a95084` | C4 architecture diagrams, CAP theorem analysis, 4 ADRs, Mini-ATAM utility tree, Pattern justification table (C8), Evidence report (C9), AI usage log (C11), and comprehensive README.md. | 50 Tests Passed |
+| **Hardening** | `dec6f1f` | Fixed two-person ChangeControl approvals (rules/variations/deletions), Observer deletion events, private `@FeatureGuard` fallback reflection, and Docker Compose wiring. | 54 Local Tests Passed (CI Failed on Test Leakage) |
+| **CI Test Isolation Fix** | *(Current)* | Added `TestDatabaseCleaner` (`@BeforeEach`/`@AfterEach` cleanup across all 10 Flyway tables) for integration and `@DataJpaTest` suites, fixed `Phase3AdvancedFeaturesIntegrationTest` transaction/SSE leaks, and updated C9/C11 docs. | All Tests Passed |
 
 ---
 
@@ -88,3 +90,16 @@ Constraint C11 requires documenting **at least three specific cases** where the 
 - **How It Was Fixed**:
   1. Added a second pass in `DefaultFlagShipClient.notifyChanges` iterating over `oldFlags.keySet()` to find deleted keys and fire `listener.onFlagChanged(oldKey, null)`.
   2. Added unit test `DefaultFlagShipClientUnitTest.changeListener_notifiesUpdatesAndDeletions` verifying that additions, updates, and deletions are all properly emitted.
+
+### Case Study 6: GitHub Actions CI Failure Due to Cross-Test H2 Database State Leakage (`FlagshipServerIntegrationTest.java:89`)
+- **Initial AI Output**: `Phase3AdvancedFeaturesIntegrationTest` created project `p3-proj` in `@BeforeEach` (including a redundant `staging` environment creation caught by an empty `try/catch`), left `sseStreamSubscription()` non-transactional so `p3-proj` was permanently committed, and `FlagshipServerIntegrationTest` had no `@BeforeEach`/`@AfterEach` table cleanup.
+- **How It Was Found**: GitHub Actions CI Run #8 on commit `dec6f1f` (`ubuntu-latest`) failed `FlagshipServerIntegrationTest.fullControlPlaneLifecycleWithJwtRbacEvaluationPreviewAndSnapshot` at line 89 (`jsonPath("$.totalElements").value(1)` failed because Actual was `2`). On Windows NTFS, Surefire discovered and ran `FlagshipServerIntegrationTest` before `Phase3AdvancedFeaturesIntegrationTest`, masking the leak; on Linux `ext4`, `Phase3AdvancedFeaturesIntegrationTest` ran first and left `p3-proj` in the `projects` table.
+- **Root-Cause Analysis**:
+  1. `application-test.yml` shares a persistent in-memory H2 instance (`jdbc:h2:mem:flagship_test;...;DB_CLOSE_DELAY=-1`) across Spring test contexts in the same JVM.
+  2. `Phase3AdvancedFeaturesIntegrationTest.sseStreamSubscription()` was not `@Transactional`, so `p3-proj` committed in `@BeforeEach` remained in `projects`.
+  3. Flyway `V2__phase3_advanced_features.sql` added 5 audit/experiment/scheduling tables without foreign-key cascades from `projects`, requiring explicit child-before-parent cleanup across all 10 tables.
+- **How It Was Fixed**:
+  1. Created `TestDatabaseCleaner.cleanAllTables(JdbcTemplate)` in `flagship-server` test sources to clear all 10 Flyway V1/V2 tables in strict child-before-parent FK order (compatible with both H2 and PostgreSQL 16).
+  2. Wired `@BeforeEach` and `@AfterEach` cleanup into `FlagshipServerIntegrationTest` (also inherited by `PostgresTestcontainersIntegrationTest`), `Phase3AdvancedFeaturesIntegrationTest`, and `@BeforeEach` into `FlagshipRepositoryDataJpaSliceTest`.
+  3. Removed redundant `staging` creation and test-level `@Transactional` in `Phase3AdvancedFeaturesIntegrationTest`, and ensured `sseStreamSubscription()` closes its `SseEmitter` via `finally { emitter.complete(); }`.
+  4. Verified with forced reverse execution (`-Dsurefire.runOrder=reversealphabetical`) and full `mvn clean test`.

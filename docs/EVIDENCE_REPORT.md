@@ -180,3 +180,12 @@ In accordance with **Constraint C9**, all failed verification runs encountered d
 - **Symptom**: `qa1-benchmark.ps1` had hardcoded `if ($p99 -lt 10.0)`, while the project specification stated: "Local evaluation of a flag with 10 rules takes at most 50 µs at p99".
 - **Root Cause**: Discrepancy between author's exploratory threshold (10.0 µs) and the official project specification (50.0 µs).
 - **Fix**: Aligned `qa1-benchmark.ps1` with the specification (`if ($p99 -le 50.0)`). The measured p99 of **7.10 µs** comfortably satisfies both.
+
+### Issue 4: GitHub Actions CI Failure — Cross-Test Database State Leakage (`FlagshipServerIntegrationTest.java:89`)
+- **Symptom**: GitHub Actions CI Run #8 on commit `dec6f1f` (`ubuntu-latest`) failed `FlagshipServerIntegrationTest.fullControlPlaneLifecycleWithJwtRbacEvaluationPreviewAndSnapshot` at line 89 with `JSON path "$.totalElements" expected:<1> but was:<2>`.
+- **Root Cause**: `application-test.yml` uses `jdbc:h2:mem:flagship_test;...;DB_CLOSE_DELAY=-1`, which persists database state across test classes in the same JVM. `Phase3AdvancedFeaturesIntegrationTest` inserted project `p3-proj` in `@BeforeEach` and committed it during the non-transactional `sseStreamSubscription()` test without cleaning up afterwards. Windows NTFS happened to execute `FlagshipServerIntegrationTest` first, whereas Linux `ext4` in CI executed `Phase3AdvancedFeaturesIntegrationTest` first and leaked `p3-proj` into the `projects` table.
+- **Fix**:
+  1. Added `TestDatabaseCleaner.cleanAllTables(JdbcTemplate)` to delete rows across all 10 Flyway V1/V2 tables (`experiment_events`, `experiments`, `scheduled_flag_changes`, `change_requests`, `flag_change_history`, `project_role_assignments`, `flags`, `segments`, `environments`, `projects`) in foreign-key order.
+  2. Applied `@BeforeEach` / `@AfterEach` database resets across `FlagshipServerIntegrationTest` (and `PostgresTestcontainersIntegrationTest`), `Phase3AdvancedFeaturesIntegrationTest`, and `@BeforeEach` on `FlagshipRepositoryDataJpaSliceTest`.
+  3. Removed redundant environment creation and test-level `@Transactional` in `Phase3AdvancedFeaturesIntegrationTest`, and closed the test `SseEmitter` cleanly.
+- **Verification**: Verified locally under both forced reverse alphabetical test execution (`mvn test -pl flagship-server "-Dsurefire.runOrder=reversealphabetical"`) and full `mvn clean test` with 0 failures and 0 errors.

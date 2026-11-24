@@ -5,13 +5,14 @@ import com.flagship.core.model.VariationType;
 import com.flagship.server.domain.ChangeRequestStatus;
 import com.flagship.server.dto.*;
 import com.flagship.server.service.*;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
@@ -50,31 +51,36 @@ public class Phase3AdvancedFeaturesIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private final String projectKey = "p3-proj";
     private final String envKey = "staging";
 
     @BeforeEach
     void setUp() {
-        try {
-            projectService.createProject(new CreateProjectRequest(projectKey, "Phase 3 Project", "Test proj"));
-        } catch (Exception ignored) {
-        }
-        try {
-            projectService.createEnvironment(projectKey, new CreateEnvironmentRequest(envKey, "Staging", false));
-        } catch (Exception ignored) {
-        }
+        TestDatabaseCleaner.cleanAllTables(jdbcTemplate);
+        projectService.createProject(new CreateProjectRequest(projectKey, "Phase 3 Project", "Test proj"));
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestDatabaseCleaner.cleanAllTables(jdbcTemplate);
     }
 
     @Test
     @DisplayName("FR5 Real-time updates: SseBroadcasterService registers subscriber and active count")
     void sseStreamSubscription() {
         SseEmitter emitter = sseBroadcasterService.subscribe(projectKey, envKey);
-        assertThat(emitter).isNotNull();
-        assertThat(sseBroadcasterService.getActiveSubscriberCount(projectKey, envKey)).isGreaterThanOrEqualTo(1);
+        try {
+            assertThat(emitter).isNotNull();
+            assertThat(sseBroadcasterService.getActiveSubscriberCount(projectKey, envKey)).isGreaterThanOrEqualTo(1);
+        } finally {
+            emitter.complete();
+        }
     }
 
     @Test
-    @Transactional
     @DisplayName("FR7 Change Control: History recording and one-action rollback")
     void changeControl_historyAndRollback() throws Exception {
         String flagKey = "rollback-flag";
@@ -137,14 +143,10 @@ public class Phase3AdvancedFeaturesIntegrationTest {
     }
 
     @Test
-    @Transactional
     @DisplayName("FR7 Change Control: Two-person approval enforcement")
     void changeControl_twoPersonApproval() throws Exception {
         String prodEnvKey = "prod-approval";
-        try {
-            projectService.createEnvironment(projectKey, new CreateEnvironmentRequest(prodEnvKey, "Production", true));
-        } catch (Exception ignored) {
-        }
+        projectService.createEnvironment(projectKey, new CreateEnvironmentRequest(prodEnvKey, "Production", true));
 
         String flagKey = "protected-flag";
         CreateFlagRequest createReq = new CreateFlagRequest(
@@ -265,7 +267,6 @@ public class Phase3AdvancedFeaturesIntegrationTest {
     }
 
     @Test
-    @Transactional
     @DisplayName("FR7 Change Control: Scheduled flag changes executed automatically")
     void scheduledFlagChanges() throws Exception {
         String flagKey = "sched-flag";
@@ -308,7 +309,6 @@ public class Phase3AdvancedFeaturesIntegrationTest {
     }
 
     @Test
-    @Transactional
     @DisplayName("FR8 Experiments: Events ingestion and statistical calculation")
     void experiments_eventsAndStatisticalSignificance() {
         String flagKey = "exp-flag";
@@ -349,7 +349,6 @@ public class Phase3AdvancedFeaturesIntegrationTest {
     }
 
     @Test
-    @Transactional
     @DisplayName("FR9 Flag Hygiene: Detects stale flags")
     void flagHygiene_detectsStaleFlags() {
         List<StaleFlagDto> stale = flagHygieneService.findStaleFlags(projectKey, envKey);
