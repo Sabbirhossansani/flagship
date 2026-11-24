@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlagShip | Enterprise Feature Flag Control Plane</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+            </svg>
+            <span class="brand-name">FlagShip</span>
+            <span class="brand-tag">Admin Console</span>
+        </div>
+
+        <div class="topbar-controls">
+            <div class="control-group">
+                <label for="projectSelect">Project:</label>
+                <select id="projectSelect" class="form-select">
+                    <option value="default" selected>default</option>
+                    <option value="ecommerce">ecommerce</option>
+                    <option value="fintech">fintech</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="envSelect">Environment:</label>
+                <select id="envSelect" class="form-select">
+                    <option value="production" selected>production</option>
+                    <option value="staging">staging</option>
+                    <option value="development">development</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="apiKeyInput">API Key:</label>
+                <input type="password" id="apiKeyInput" class="form-input" placeholder="fs_dev_bootstrap_key" value="fs_dev_bootstrap_key">
+            </div>
+
+            <div class="sync-badge" id="syncStatus">
+                <span class="sync-dot live"></span>
+                <span class="sync-text">Live Sync</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-layout">
+        <nav class="sidebar">
+            <ul class="nav-list">
+                <li class="nav-item active" data-tab="flags">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span>Flags &amp; Switches</span>
+                </li>
+                <li class="nav-item" data-tab="segments">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>Segments</span>
+                </li>
+                <li class="nav-item" data-tab="approvals">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <span>Approvals (Two-Person)</span>
+                    <span class="badge badge-warning count-badge" id="pendingApprovalsCount">1</span>
+                </li>
+                <li class="nav-item" data-tab="history">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                    <span>Audit &amp; Rollback</span>
+                </li>
+                <li class="nav-item" data-tab="experiments">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    <span>Experiments (SRM &amp; Z-Test)</span>
+                </li>
+                <li class="nav-item" data-tab="hygiene">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    <span>Flag Hygiene</span>
+                    <span class="badge badge-danger count-badge" id="staleFlagsCount">2</span>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="server-endpoint">
+                    <small>Control Plane API:</small>
+                    <code id="serverUrlLabel">http://localhost:8080</code>
+                </div>
+            </div>
+        </nav>
+
+        <main class="content-panel">
+            <!-- TAB 1: FLAGS & KILL SWITCHES -->
+            <section id="tab-flags" class="tab-pane active">
+                <div class="panel-header">
+                    <div>
+                        <h2>Feature Flags &amp; Kill Switches</h2>
+                        <p class="subtitle">Real-time local evaluation with sub-second distributed propagation (FR1, FR3, FR4, FR5).</p>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="btn btn-secondary" id="btnLiveTestDrawer">🧪 Inline Tester</button>
+                        <button class="btn btn-primary" id="btnNewFlagModal">+ Create Feature Flag</button>
+                    </div>
+                </div>
+
+                <div class="filter-bar">
+                    <input type="text" id="flagSearch" class="form-input search-box" placeholder="Filter by flag key, name or owner...">
+                    <div class="filter-chips">
+                        <button class="chip active" data-filter="all">All</button>
+                        <button class="chip" data-filter="active">Active</button>
+                        <button class="chip" data-filter="killswitch">Kill Switched</button>
+                        <button class="chip" data-filter="stale">Stale</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table" id="flagsTable">
+                        <thead>
+                            <tr>
+                                <th>Flag Key &amp; Name</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Rollout</th>
+                                <th>Kill Switch (Emergency)</th>
+                                <th>Version</th>
+                                <th>Owner</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="flagsTableBody">
+                            <!-- Rendered dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- TAB 2: AUDIENCE SEGMENTS -->
+            <section id="tab-segments" class="tab-pane">
+                <div class="panel-header">
+                    <div>
+                        <h2>Audience Segments</h2>
+                        <p class="subtitle">Reusable targeting audiences with composite rule trees and user lists (FR2, FR10).</p>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" id="btnNewSegmentModal">+ Create Segment</button>
+                    </div>
+                </div>
+
+                <div class="grid-cards" id="segmentsGrid">
+                    <!-- Dynamic segments -->
+                </div>
+            </section>
+
+            <!-- TAB 3: APPROVALS QUEUE (FR7) -->
+            <section id="tab-approvals" class="tab-pane">
+                <div class="panel-header">
+                    <div>
+                        <h2>Production Two-Person Approval Queue</h2>
+                        <p class="subtitle">Safety governance: modifications to production flags require independent peer review before applying (FR7).</p>
+                    </div>
+                </div>
+
+                <div class="card-list" id="approvalsList">
+                    <!-- Dynamic approvals -->
+                </div>
+            </section>
+
+            <!-- TAB 4: AUDIT HISTORY & ROLLBACK (FR7) -->
+            <section id="tab-history" class="tab-pane">
+                <div class="panel-header">
+                    <div>
+                        <h2>Audit Trail &amp; One-Action Rollback</h2>
+                        <p class="subtitle">Immutable audit trail of commands and instant rollback to any previous version state (FR7).</p>
+                    </div>
+                </div>
+
+                <div class="timeline" id="historyTimeline">
+                    <!-- Dynamic history -->
+                </div>
+            </section>
+
+            <!-- TAB 5: EXPERIMENTS (FR8) -->
+            <section id="tab-experiments" class="tab-pane">
+                <div class="panel-header">
+                    <div>
+                        <h2>A/B Experiments &amp; Statistical Significance</h2>
+                        <p class="subtitle">Continuous SRM (Sample Ratio Mismatch) chi-square test and two-proportion z-test significance (FR8).</p>
+                    </div>
+                </div>
+
+                <div class="experiments-container" id="experimentsContainer">
+                    <!-- Dynamic experiments -->
+                </div>
+            </section>
+
+            <!-- TAB 6: FLAG HYGIENE (FR9) -->
+            <section id="tab-hygiene" class="tab-pane">
+                <div class="panel-header">
+                    <div>
+                        <h2>Flag Hygiene &amp; Stale Flag Detection</h2>
+                        <p class="subtitle">Automated detection of flags not evaluated in 30 days OR 100% rolled out for 14 days (FR9).</p>
+                    </div>
+                </div>
+
+                <div class="hygiene-banner">
+                    <div class="hygiene-metric">
+                        <span class="metric-val" id="staleSummaryCount">2</span>
+                        <span class="metric-lbl">Stale Flags Detected</span>
+                    </div>
+                    <div class="hygiene-text">
+                        <strong>Technical Debt Reduction:</strong> Removing stale feature flags reduces code complexity, minimizes evaluation overhead, and prevents branch degradation.
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table" id="staleTable">
+                        <thead>
+                            <tr>
+                                <th>Flag Key</th>
+                                <th>Owner</th>
+                                <th>Reason for Staleness</th>
+                                <th>Last Evaluated</th>
+                                <th>Full Rollout Since</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staleTableBody">
+                            <!-- Dynamic stale flags -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- INLINE EVALUATION DRAWER -->
+    <div class="drawer" id="evalDrawer">
+        <div class="drawer-header">
+            <h3>Inline Feature Evaluation Tester</h3>
+            <button class="close-btn" id="closeDrawer">&times;</button>
+        </div>
+        <div class="drawer-body">
+            <div class="form-group">
+                <label>Select Flag:</label>
+                <select id="evalFlagSelect" class="form-select"></select>
+            </div>
+            <div class="form-group">
+                <label>User Key (for Murmur3 bucketing):</label>
+                <input type="text" id="evalUserKey" class="form-input" value="user-alice-42">
+            </div>
+            <div class="form-group">
+                <label>Context Attributes (JSON):</label>
+                <textarea id="evalAttributes" class="form-input code-input" rows="4">{"country": "US", "plan": "enterprise", "betaTester": true}</textarea>
+            </div>
+            <button class="btn btn-primary btn-block" id="btnExecuteEval">Evaluate Now</button>
+
+            <div class="eval-result-card" id="evalResultBox" style="display:none;">
+                <h4>Evaluation Result:</h4>
+                <div class="result-row"><span class="lbl">Variation Key:</span> <code class="val" id="resVarKey">checkout-v2-enabled</code></div>
+                <div class="result-row"><span class="lbl">Value:</span> <code class="val" id="resValue">true</code></div>
+                <div class="result-row"><span class="lbl">Reason:</span> <span class="val" id="resReason">PERCENTAGE_ROLLOUT</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE FLAG MODAL -->
+    <div class="modal" id="createFlagModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Feature Flag</h3>
+                <button class="close-btn" id="closeCreateModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Flag Key (unique):</label>
+                    <input type="text" id="newFlagKey" class="form-input" placeholder="e.g. checkout-one-click">
+                </div>
+                <div class="form-group">
+                    <label>Display Name:</label>
+                    <input type="text" id="newFlagName" class="form-input" placeholder="e.g. Instant One-Click Checkout">
+                </div>
+                <div class="form-group">
+                    <label>Variation Type:</label>
+                    <select id="newFlagType" class="form-select">
+                        <option value="BOOLEAN" selected>BOOLEAN (true / false)</option>
+                        <option value="STRING">STRING (Multivariate)</option>
+                        <option value="NUMBER">NUMBER</option>
+                        <option value="JSON">JSON Configuration</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Owner Email / Team:</label>
+                    <input type="text" id="newFlagOwner" class="form-input" placeholder="checkout-team@company.com">
+                </div>
+                <div class="form-group">
+                    <label>Initial Rollout Percentage (%):</label>
+                    <input type="number" id="newFlagRollout" class="form-input" min="0" max="100" value="0">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelCreate">Cancel</button>
+                <button class="btn btn-primary" id="btnSubmitCreate">Create Flag</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: flagship-admin-web
+
+flagship:
+  server:
+    url: ${FLAGSHIP_API_BASE_URL:http://localhost:8080}
