@@ -47,6 +47,12 @@ public class ProjectAccessEvaluator {
                 .orElse(false);
     }
 
+    public boolean canOperate(Authentication authentication, String projectKey) {
+        return resolveRole(authentication, projectKey)
+                .map(role -> role.canEdit() || role.canApprove() || role.isAdmin())
+                .orElse(false);
+    }
+
     public boolean canApprove(Authentication authentication, String projectKey) {
         return resolveRole(authentication, projectKey)
                 .map(ProjectRole::canApprove)

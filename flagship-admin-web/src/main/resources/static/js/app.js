@@ -43,6 +43,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnExecuteEval = document.getElementById('btnExecuteEval');
     const evalResultBox = document.getElementById('evalResultBox');
 
+    // Segment Modal
+    const createSegmentModal = document.getElementById('createSegmentModal');
+    const btnNewSegmentModal = document.getElementById('btnNewSegmentModal');
+    const closeSegmentModal = document.getElementById('closeSegmentModal');
+    const btnCancelCreateSegment = document.getElementById('btnCancelCreateSegment');
+    const btnSubmitCreateSegment = document.getElementById('btnSubmitCreateSegment');
+
     // Initialize
     init();
 
@@ -120,6 +127,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCancelCreate.addEventListener('click', () => createFlagModal.classList.remove('open'));
         btnSubmitCreate.addEventListener('click', handleCreateFlag);
 
+        // Segment Modal
+        if (btnNewSegmentModal && createSegmentModal) {
+            btnNewSegmentModal.addEventListener('click', () => createSegmentModal.classList.add('open'));
+            if (closeSegmentModal) closeSegmentModal.addEventListener('click', () => createSegmentModal.classList.remove('open'));
+            if (btnCancelCreateSegment) btnCancelCreateSegment.addEventListener('click', () => createSegmentModal.classList.remove('open'));
+            if (btnSubmitCreateSegment) btnSubmitCreateSegment.addEventListener('click', handleCreateSegment);
+        }
+
         // Inline evaluation execution
         btnExecuteEval.addEventListener('click', handleExecuteEval);
     }
@@ -177,9 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadApprovals() {
         try {
-            const resp = await apiFetch('/change-control/requests');
+            const resp = await apiFetch('/change-requests');
             if (resp.ok) {
-                state.approvals = await resp.json();
+                const data = await resp.json();
+                state.approvals = Array.isArray(data) ? data : (data.content || []);
             } else {
                 state.approvals = [];
             }
@@ -191,9 +207,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadHistory() {
         try {
-            const resp = await apiFetch('/change-control/audit');
+            const resp = await apiFetch('/audit');
             if (resp.ok) {
-                state.history = await resp.json();
+                const data = await resp.json();
+                state.history = Array.isArray(data) ? data : (data.content || []);
             } else {
                 state.history = [];
             }
@@ -207,7 +224,44 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const resp = await apiFetch('/experiments');
             if (resp.ok) {
-                state.experiments = await resp.json();
+                const data = await resp.json();
+                const list = Array.isArray(data) ? data : (data.content || []);
+                const detailed = [];
+                for (const exp of list) {
+                    try {
+                        const resultsResp = await apiFetch(`/flags/${exp.flagKey}/experiment-results?metricName=${encodeURIComponent(exp.metricName || 'conversion')}`);
+                        if (resultsResp.ok) {
+                            const res = await resultsResp.json();
+                            const varList = Object.values(res.variations || {}).map(v => ({
+                                key: v.variationKey,
+                                exposures: v.exposures || 0,
+                                conversions: v.conversions || 0,
+                                conversionRate: v.conversionRate || 0.0,
+                                zScore: v.zScore,
+                                pValue: v.pValue,
+                                statisticallySignificant: v.statisticallySignificant
+                            }));
+                            const treatment = varList.find(v => v.key !== res.baselineVariationKey) || varList[0];
+                            detailed.push({
+                                experimentKey: exp.key || exp.experimentKey,
+                                flagKey: exp.flagKey,
+                                metricName: exp.metricName,
+                                variations: varList,
+                                srmChiSquare: res.chiSquareStat || 0.0,
+                                srmPValue: res.srmPValue || 1.0,
+                                srmDetected: !!res.hasSrm,
+                                zScore: treatment?.zScore || 0.0,
+                                zTestPValue: treatment?.pValue || 1.0,
+                                statisticallySignificant: !!treatment?.statisticallySignificant
+                            });
+                            continue;
+                        }
+                    } catch (detailErr) {
+                        console.warn('Could not fetch experiment details', detailErr);
+                    }
+                    detailed.push(exp);
+                }
+                state.experiments = detailed;
             } else {
                 state.experiments = [];
             }
@@ -221,7 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const resp = await apiFetch('/flags/stale');
             if (resp.ok) {
-                state.staleFlags = await resp.json();
+                const data = await resp.json();
+                const rawList = Array.isArray(data) ? data : (data.content || []);
+                state.staleFlags = rawList.map(sf => ({
+                    key: sf.key,
+                    owner: sf.owner,
+                    reason: sf.reason || (sf.fullRolloutSince ? '100% rolled out for > 14 days without configuration mutations' : 'No evaluations recorded across clients in past 30 days'),
+                    lastEvaluatedAt: sf.lastEvaluatedAt,
+                    fullRolloutSince: sf.fullRolloutSince
+                }));
             } else {
                 state.staleFlags = [];
             }
@@ -459,50 +521,77 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        container.innerHTML = state.approvals.map(req => `
+        container.innerHTML = state.approvals.map(req => {
+            const flagKey = req.flagKey || req.entityKey || 'flag';
+            const author = req.author || 'author';
+            const dateStr = (req.requestedAt || req.createdAt) ? new Date(req.requestedAt || req.createdAt).toLocaleString() : 'Recently';
+            const reason = req.reason || 'Configuration change';
+            const diff = req.diff || req.diffSummary || 'Configuration mutation';
+            const reqId = req.id;
+
+            return `
             <div class="card" style="margin-bottom:16px;">
                 <div class="card-header">
                     <div>
-                        <h4>Approval Request for: <code>${escapeHtml(req.flagKey)}</code></h4>
-                        <small style="color:var(--text-muted)">Requested by ${escapeHtml(req.author)} on ${new Date(req.requestedAt).toLocaleString()}</small>
+                        <h4>Approval Request for: <code>${escapeHtml(flagKey)}</code></h4>
+                        <small style="color:var(--text-muted)">Requested by ${escapeHtml(author)} on ${dateStr}</small>
                     </div>
                     <span class="badge badge-warning">Requires 2nd Approver</span>
                 </div>
                 <div style="background:var(--bg-main);padding:12px;border-radius:var(--radius-sm);margin:12px 0;">
-                    <p style="font-size:0.85rem;margin-bottom:6px;"><strong>Reason:</strong> ${escapeHtml(req.reason)}</p>
-                    <code style="font-size:0.75rem;color:#93c5fd;">${escapeHtml(req.diff || 'Configuration mutation')}</code>
+                    <p style="font-size:0.85rem;margin-bottom:6px;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+                    <code style="font-size:0.75rem;color:#93c5fd;">${escapeHtml(diff)}</code>
                 </div>
                 <div style="display:flex;justify-content:flex-end;gap:10px;">
-                    <button class="btn btn-secondary btn-sm" onclick="window.rejectApproval('${escapeHtml(req.id)}')">Reject</button>
-                    <button class="btn btn-primary btn-sm" onclick="window.approveRequest('${escapeHtml(req.id)}')">Approve &amp; Apply</button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.rejectApproval('${escapeHtml(String(reqId))}')">Reject</button>
+                    <button class="btn btn-primary btn-sm" onclick="window.approveRequest('${escapeHtml(String(reqId))}')">Approve &amp; Apply</button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function renderHistory() {
         const timeline = document.getElementById('historyTimeline');
-        timeline.innerHTML = state.history.map(item => `
+        if (!state.history || state.history.length === 0) {
+            timeline.innerHTML = `
+                <div class="card" style="text-align:center;color:var(--text-muted);padding:40px;">
+                    📜 No audit trail entries recorded yet for environment <strong>${escapeHtml(state.environmentKey)}</strong>.
+                </div>
+            `;
+            return;
+        }
+
+        timeline.innerHTML = state.history.map(item => {
+            const flagKey = item.flagKey || item.entityKey || 'flag';
+            const action = item.action || 'MUTATION';
+            const version = item.version || 1;
+            const author = item.author || 'system';
+            const dateStr = (item.timestamp || item.createdAt) ? new Date(item.timestamp || item.createdAt).toLocaleString() : 'Recently';
+            const reason = item.reason || item.diffSummary || 'Flag configuration update';
+
+            return `
             <div class="timeline-item">
                 <div class="timeline-dot"></div>
                 <div class="timeline-card">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                         <div>
-                            <strong>${escapeHtml(item.action || 'MUTATION')}</strong> on <code>${escapeHtml(item.flagKey)}</code> (v${item.version})
+                            <strong>${escapeHtml(action)}</strong> on <code>${escapeHtml(flagKey)}</code> (v${version})
                             <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
-                                By ${escapeHtml(item.author || 'system')} &bull; ${new Date(item.timestamp).toLocaleString()}
+                                By ${escapeHtml(author)} &bull; ${dateStr}
                             </div>
                         </div>
-                        <button class="btn btn-secondary btn-sm" onclick="window.rollbackToVersion('${escapeHtml(item.flagKey)}', ${item.version})">
-                            ↺ Rollback to v${item.version}
+                        <button class="btn btn-secondary btn-sm" onclick="window.rollbackToVersion('${escapeHtml(flagKey)}', ${version})">
+                            ↺ Rollback to v${version}
                         </button>
                     </div>
                     <div style="font-size:0.85rem;color:var(--text-secondary);margin-top:8px;">
-                        ${escapeHtml(item.reason || 'Flag configuration update')}
+                        ${escapeHtml(reason)}
                     </div>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function renderExperiments() {
@@ -589,23 +678,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Interactive Actions
     window.toggleKillSwitch = async (flagKey, enableKillSwitch) => {
         try {
-            const resp = await apiFetch(`/flags/${flagKey}/kill-switch?enabled=${enableKillSwitch}`, {
-                method: 'POST'
+            const resp = await apiFetch(`/flags/${flagKey}/kill-switch`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    killSwitch: enableKillSwitch,
+                    reason: `Kill switch ${enableKillSwitch ? 'ARMED' : 'DISARMED'} from admin web console`
+                })
             });
             if (resp.ok) {
-                alert(`Kill switch for '${flagKey}' has been ${enableKillSwitch ? 'ARMED' : 'DISARMED'}. Changes propagated within 5s.`);
-                refreshDashboard();
+                alert(`Kill switch for '${flagKey}' has been ${enableKillSwitch ? 'ARMED' : 'DISARMED'}. Changes persisted and propagated within 5s.`);
+                await refreshDashboard();
+                return;
             } else {
-                throw new Error(`Server returned HTTP ${resp.status}`);
+                const err = await resp.json().catch(() => ({}));
+                alert(`Failed to toggle kill switch: ${err.detail || resp.statusText}`);
             }
         } catch (e) {
-            // Simulated toggle
-            const flag = state.flags.find(f => f.key === flagKey);
-            if (flag) {
-                flag.killSwitch = enableKillSwitch;
-                renderFlags();
-                alert(`[DEMO] Kill switch for '${flagKey}' updated to: ${enableKillSwitch}`);
-            }
+            console.warn('Backend toggle failed, simulating', e);
+        }
+        const flag = state.flags.find(f => f.key === flagKey);
+        if (flag) {
+            flag.killSwitch = enableKillSwitch;
+            renderFlags();
+            alert(`[DEMO] Kill switch for '${flagKey}' updated to: ${enableKillSwitch}`);
         }
     };
 
@@ -614,24 +709,43 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!approver) return;
 
         try {
-            const resp = await apiFetch(`/change-control/requests/${requestId}/approve?approver=${encodeURIComponent(approver)}`, {
+            const resp = await apiFetch(`/change-requests/${requestId}/approve?approver=${encodeURIComponent(approver)}`, {
                 method: 'POST'
             });
             if (resp.ok) {
                 alert('Change request approved and atomically applied to production!');
-                refreshDashboard();
+                await refreshDashboard();
+                return;
             } else {
-                throw new Error(`HTTP ${resp.status}`);
+                const err = await resp.json().catch(() => ({}));
+                alert(`Approval failed: ${err.detail || resp.statusText}`);
             }
         } catch (e) {
-            state.approvals = state.approvals.filter(a => a.id !== requestId);
-            renderApprovals();
-            alert(`[DEMO] Request ${requestId} approved by ${approver}.`);
+            console.warn('Backend approval failed, simulating', e);
         }
+        state.approvals = state.approvals.filter(a => String(a.id) !== String(requestId));
+        renderApprovals();
+        alert(`[DEMO] Request ${requestId} approved by ${approver}.`);
     };
 
-    window.rejectApproval = (requestId) => {
-        state.approvals = state.approvals.filter(a => a.id !== requestId);
+    window.rejectApproval = async (requestId) => {
+        const reason = prompt('Enter rejection reason:', 'Configuration change rejected by reviewer');
+        if (reason === null) return;
+
+        try {
+            const resp = await apiFetch(`/change-requests/${requestId}/reject`, {
+                method: 'POST',
+                body: JSON.stringify({ reason })
+            });
+            if (resp.ok) {
+                alert(`Request ${requestId} rejected.`);
+                await refreshDashboard();
+                return;
+            }
+        } catch (e) {
+            console.warn('Backend rejection failed, simulating', e);
+        }
+        state.approvals = state.approvals.filter(a => String(a.id) !== String(requestId));
         renderApprovals();
         alert(`Request ${requestId} rejected.`);
     };
@@ -640,18 +754,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm(`Are you sure you want to rollback '${flagKey}' to version ${targetVersion}?`)) return;
 
         try {
-            const resp = await apiFetch(`/change-control/flags/${flagKey}/rollback?targetVersion=${targetVersion}`, {
-                method: 'POST'
+            const resp = await apiFetch(`/flags/${flagKey}/rollback`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    targetVersion: targetVersion,
+                    reason: `Rolled back to v${targetVersion} from admin console`
+                })
             });
             if (resp.ok) {
                 alert(`Successfully rolled back '${flagKey}' to version ${targetVersion}!`);
-                refreshDashboard();
+                await refreshDashboard();
+                return;
             } else {
-                throw new Error(`HTTP ${resp.status}`);
+                const err = await resp.json().catch(() => ({}));
+                alert(`Rollback failed: ${err.detail || resp.statusText}`);
             }
         } catch (e) {
-            alert(`[DEMO] Rollback command dispatched for '${flagKey}' -> v${targetVersion}`);
+            console.warn('Backend rollback failed, simulating', e);
         }
+        alert(`[DEMO] Rollback command dispatched for '${flagKey}' -> v${targetVersion}`);
     };
 
     window.deprecateFlag = (flagKey) => {
@@ -659,6 +780,50 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStaleFlags();
         alert(`Flag '${flagKey}' marked as deprecated/cleaned up.`);
     };
+
+    async function handleCreateSegment() {
+        const key = document.getElementById('newSegmentKey').value.trim();
+        const name = document.getElementById('newSegmentName').value.trim();
+        const description = document.getElementById('newSegmentDescription').value.trim();
+        const usersRaw = document.getElementById('newSegmentUsers').value.trim();
+        const includedUsers = usersRaw ? usersRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        if (!key) {
+            alert('Segment Key is required');
+            return;
+        }
+
+        const payload = {
+            key,
+            name: name || key,
+            description: description || 'Custom audience segment',
+            includedUsers,
+            excludedUsers: []
+        };
+
+        try {
+            const resp = await apiFetch('/segments', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            if (resp.ok) {
+                alert(`Segment '${key}' successfully created!`);
+                createSegmentModal.classList.remove('open');
+                await refreshDashboard();
+                return;
+            } else {
+                const err = await resp.json().catch(() => ({}));
+                alert(`Failed to create segment: ${err.detail || resp.statusText}`);
+            }
+        } catch (e) {
+            console.warn('Backend segment creation failed, adding locally', e);
+        }
+
+        state.segments.push(payload);
+        createSegmentModal.classList.remove('open');
+        renderSegments();
+        alert(`[DEMO] Segment '${key}' created.`);
+    }
 
     window.openEvalDrawer = (flagKey) => {
         populateEvalFlagSelect();
@@ -747,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (resp.ok) {
                 alert(`Flag '${key}' successfully created!`);
                 createFlagModal.classList.remove('open');
-                refreshDashboard();
+                await refreshDashboard();
                 return;
             }
         } catch (e) {

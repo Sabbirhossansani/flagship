@@ -43,6 +43,6 @@ class DemoApplicationIntegrationTest {
         mockMvc.perform(get("/actuator/flagship"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").exists())
-                .andExpect(jsonPath("$.projectKey").value("demo-project"));
+                .andExpect(jsonPath("$.projectKey").value("default"));
     }
 }

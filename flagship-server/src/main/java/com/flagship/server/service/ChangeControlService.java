@@ -115,6 +115,19 @@ public class ChangeControlService {
         return PageResponse.from(page, this::toHistoryResponse);
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<ChangeHistoryResponse> getAuditHistory(
+            String projectKey,
+            String envKey,
+            Pageable pageable
+    ) {
+        Page<FlagChangeHistoryEntity> page = historyRepository
+                .findAllByProjectKeyAndEnvKeyOrderByCreatedAtDesc(
+                        projectKey, envKey, pageable
+                );
+        return PageResponse.from(page, this::toHistoryResponse);
+    }
+
     @Transactional
     public FlagResponse rollbackFlag(
             String projectKey,

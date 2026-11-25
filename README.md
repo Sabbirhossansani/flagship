@@ -38,12 +38,17 @@ mvn clean install
 ```
 
 ### Step 2: Run via Docker Compose (Recommended)
-Launch the entire platform (PostgreSQL, Control Plane, Admin Web, and Demo App) with a single command:
+Before building and running the Docker containers, build the Maven artifacts:
 ```powershell
-docker-compose up --build -d
+mvn clean package -DskipTests
 ```
-All services will start in under 60 seconds:
-- **Admin Web Console**: [http://localhost:8081](http://localhost:8081)
+
+Then launch the entire platform (PostgreSQL, FlagShip Server Control Plane, Admin Web Console, and Demo App) with Docker Compose:
+```powershell
+docker compose up --build
+```
+All services start with self-seeded default data in under 60 seconds:
+- **Admin Web Console**: [http://localhost:3000](http://localhost:3000) (or [http://localhost:8081](http://localhost:8081) if run locally)
 - **FlagShip Server REST API**: [http://localhost:8080](http://localhost:8080)
 - **OpenAPI Swagger UI**: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 - **Demo Microservice**: [http://localhost:8082](http://localhost:8082)

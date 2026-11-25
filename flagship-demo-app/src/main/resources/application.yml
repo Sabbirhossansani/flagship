@@ -8,9 +8,9 @@ spring:
 flagship:
   enabled: true
   server-url: http://localhost:8080
-  project-key: demo-project
+  project-key: default
   environment-key: production
-  api-key: dev-bootstrap-secret-change-in-production-min32chars
+  api-key: fs_dev_bootstrap_key
   polling-interval: 30s
   sse-enabled: false
   disk-persistence-enabled: true

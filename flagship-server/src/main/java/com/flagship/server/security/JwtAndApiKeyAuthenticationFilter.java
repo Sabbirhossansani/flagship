@@ -85,11 +85,14 @@ public class JwtAndApiKeyAuthenticationFilter extends OncePerRequestFilter {
                         apiKey.getBytes(StandardCharsets.UTF_8)
                 )) {
                     List<SimpleGrantedAuthority> authorities = List.of(
+                            new SimpleGrantedAuthority("ROLE_ADMIN"),
+                            new SimpleGrantedAuthority("ROLE_APPROVER"),
+                            new SimpleGrantedAuthority("ROLE_EDITOR"),
                             new SimpleGrantedAuthority("ROLE_VIEWER"),
                             new SimpleGrantedAuthority("ROLE_SDK")
                     );
                     UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken("sdk-client", null, authorities);
+                            new UsernamePasswordAuthenticationToken("bootstrap-admin", null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
             }

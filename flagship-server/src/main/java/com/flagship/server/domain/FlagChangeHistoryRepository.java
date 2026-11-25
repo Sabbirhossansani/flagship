@@ -26,6 +26,12 @@ public interface FlagChangeHistoryRepository extends JpaRepository<FlagChangeHis
             Pageable pageable
     );
 
+    Page<FlagChangeHistoryEntity> findAllByProjectKeyAndEnvKeyOrderByCreatedAtDesc(
+            String projectKey,
+            String envKey,
+            Pageable pageable
+    );
+
     Optional<FlagChangeHistoryEntity> findByProjectKeyAndEnvKeyAndEntityTypeAndEntityKeyAndVersion(
             String projectKey,
             String envKey,

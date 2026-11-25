@@ -103,3 +103,19 @@ Constraint C11 requires documenting **at least three specific cases** where the 
   2. Wired `@BeforeEach` and `@AfterEach` cleanup into `FlagshipServerIntegrationTest` (also inherited by `PostgresTestcontainersIntegrationTest`), `Phase3AdvancedFeaturesIntegrationTest`, and `@BeforeEach` into `FlagshipRepositoryDataJpaSliceTest`.
   3. Removed redundant `staging` creation and test-level `@Transactional` in `Phase3AdvancedFeaturesIntegrationTest`, and ensured `sseStreamSubscription()` closes its `SseEmitter` via `finally { emitter.complete(); }`.
   4. Verified with forced reverse execution (`-Dsurefire.runOrder=reversealphabetical`) and full `mvn clean test`.
+
+### Case Study 7: Missing Admin Web Create Segment Modal & Backend Idempotent Seed Data Alignment
+- **Initial AI Output**: The Admin Web Console had a "+ Create Segment" button in the DOM but lacked the modal markup, JavaScript submission handler, and audit endpoint integration. Furthermore, on fresh Docker or local startup, `flagship-server` started with an empty database, causing `flagship-demo-app` to log HTTP 404 warnings on `/api/v1/projects/default/environments/production/snapshot` and forcing the UI into simulated demo mode.
+- **How It Was Found**: Verification of the live user journey revealed that toggling kill-switches or creating flags did not persist across page refreshes because the frontend called mismatched endpoints (`/flags/{key}/kill-switch` with POST instead of PATCH with body; `/change-control/audit` which did not exist on the server; and `/flags/{key}/rollback` expecting JSON body rather than query params).
+- **Root-Cause Analysis**:
+  1. Missing Create Segment dialog in `index.html` and event listeners in `app.js`.
+  2. Absence of an idempotent `ApplicationRunner` for database initialization on non-test profiles.
+  3. `ProjectAccessEvaluator` lacked a `canOperate` method, causing SpEL exceptions on rollback and approval endpoints.
+  4. Missing CORS headers on `flagship-server` prevented browser fetches from origins such as `http://localhost:3000`.
+- **How It Was Fixed**:
+  1. Implemented `DataSeederRunner` (`@Profile("!test")`) to idempotently seed project `default`, environment `production`, 4 flags (`checkout-v2`, `recommendation-engine-algo`, `payment-gateway-stripe`, and stale flag `legacy-coupon-banner`), 2 segments, 1 pending approval request, audit entries, and A/B conversion events.
+  2. Added `canOperate(...)` in `ProjectAccessEvaluator` and granted full administrative authorities to the bootstrap API key in `JwtAndApiKeyAuthenticationFilter`.
+  3. Added `CorsConfigurationSource` to `SecurityConfig` allowing seamless cross-origin requests from the admin console.
+  4. Added `/audit` endpoint and alias mappings (`/change-control/audit`, `/flags/stale`) to `ChangeControlController` and `FlagController`.
+  5. Wired up `createSegmentModal` and interactive handlers for segments, kill-switches, rollbacks, and approvals in `index.html` and `app.js`.
+  6. Aligned `flagship-demo-app`'s `project-key` to `default` and updated `DemoApplicationIntegrationTest`. Verified 100% clean test passes across all reactor modules (`mvn clean test`).

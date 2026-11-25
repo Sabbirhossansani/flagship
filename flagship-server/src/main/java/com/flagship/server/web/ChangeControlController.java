@@ -31,27 +31,47 @@ public class ChangeControlController {
         return changeControlService.getFlagHistory(projectKey, envKey, flagKey, FlagshipPaging.of(page, size));
     }
 
-    @PostMapping("/flags/{flagKey}/rollback")
+    @GetMapping({"/audit", "/change-control/audit"})
+    @PreAuthorize("@projectAccess.canView(authentication, #projectKey)")
+    public PageResponse<ChangeHistoryResponse> getAuditHistory(
+            @PathVariable String projectKey,
+            @PathVariable String envKey,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        return changeControlService.getAuditHistory(projectKey, envKey, FlagshipPaging.of(page, size));
+    }
+
+    @PostMapping({"/flags/{flagKey}/rollback", "/change-control/flags/{flagKey}/rollback"})
     @PreAuthorize("@projectAccess.canOperate(authentication, #projectKey)")
     public FlagResponse rollbackFlag(
             @PathVariable String projectKey,
             @PathVariable String envKey,
             @PathVariable String flagKey,
-            @Valid @RequestBody RollbackRequest request,
+            @Valid @RequestBody(required = false) RollbackRequest request,
+            @RequestParam(required = false) Long targetVersion,
+            @RequestParam(required = false) String reason,
             Authentication authentication
     ) {
         String author = (authentication != null) ? authentication.getName() : "system";
+        long resolvedVersion = (request != null && request.targetVersion() != null)
+                ? request.targetVersion()
+                : (targetVersion != null ? targetVersion : 1L);
+        String resolvedReason = (request != null && request.reason() != null && !request.reason().isBlank())
+                ? request.reason()
+                : (reason != null && !reason.isBlank() ? reason : "Rollback to version " + resolvedVersion);
+
         return changeControlService.rollbackFlag(
                 projectKey,
                 envKey,
                 flagKey,
-                request.targetVersion(),
+                resolvedVersion,
                 author,
-                request.reason()
+                resolvedReason
         );
     }
 
-    @PostMapping("/change-requests")
+    @PostMapping({"/change-requests", "/change-control/requests"})
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("@projectAccess.canView(authentication, #projectKey)")
     public ChangeRequestResponse createChangeRequest(
@@ -64,7 +84,7 @@ public class ChangeControlController {
         return changeControlService.createChangeRequest(projectKey, envKey, dto, author);
     }
 
-    @GetMapping("/change-requests")
+    @GetMapping({"/change-requests", "/change-control/requests"})
     @PreAuthorize("@projectAccess.canView(authentication, #projectKey)")
     public PageResponse<ChangeRequestResponse> listChangeRequests(
             @PathVariable String projectKey,
@@ -76,29 +96,35 @@ public class ChangeControlController {
         return changeControlService.listChangeRequests(projectKey, envKey, status, FlagshipPaging.of(page, size));
     }
 
-    @PostMapping("/change-requests/{id}/approve")
+    @PostMapping({"/change-requests/{id}/approve", "/change-control/requests/{id}/approve"})
     @PreAuthorize("@projectAccess.canOperate(authentication, #projectKey)")
     public ChangeRequestResponse approveChangeRequest(
             @PathVariable String projectKey,
             @PathVariable String envKey,
             @PathVariable Long id,
+            @RequestParam(required = false) String approver,
             Authentication authentication
     ) {
-        String approver = (authentication != null) ? authentication.getName() : "system";
-        return changeControlService.approveChangeRequest(projectKey, envKey, id, approver);
+        String resolvedApprover = (approver != null && !approver.isBlank())
+                ? approver
+                : ((authentication != null) ? authentication.getName() : "system");
+        return changeControlService.approveChangeRequest(projectKey, envKey, id, resolvedApprover);
     }
 
-    @PostMapping("/change-requests/{id}/reject")
+    @PostMapping({"/change-requests/{id}/reject", "/change-control/requests/{id}/reject"})
     @PreAuthorize("@projectAccess.canOperate(authentication, #projectKey)")
     public ChangeRequestResponse rejectChangeRequest(
             @PathVariable String projectKey,
             @PathVariable String envKey,
             @PathVariable Long id,
             @RequestBody(required = false) RejectChangeRequest request,
+            @RequestParam(required = false) String reason,
             Authentication authentication
     ) {
         String rejector = (authentication != null) ? authentication.getName() : "system";
-        String reason = (request != null && request.reason() != null) ? request.reason() : "Rejected by reviewer";
-        return changeControlService.rejectChangeRequest(projectKey, envKey, id, rejector, reason);
+        String resolvedReason = (request != null && request.reason() != null && !request.reason().isBlank())
+                ? request.reason()
+                : (reason != null && !reason.isBlank() ? reason : "Rejected by reviewer");
+        return changeControlService.rejectChangeRequest(projectKey, envKey, id, rejector, resolvedReason);
     }
 }
